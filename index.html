@@ -5981,9 +5981,24 @@
 const {lectures,questions}=window.QUIZ_DATA;
 const byId=new Map(questions.map(q=>[q.id,q]));
 const KEY='econ-study-v1',VERSION=1;
-// ... (생략) ...
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fresh=()=>({version:VERSION,records:{},bookmarks:[],session:null});
+
+// ⚠️ 바로 이 줄이 누락되어 에러가 났던 것입니다! 반드시 있어야 합니다.
+let state=fresh(),view='home',listKind='browse',page=1,filter='',search='',installPrompt=null,storageOK=true;
+
+function validState(s){
+ if(!s||s.version!==VERSION||!s.records||typeof s.records!=='object'||Array.isArray(s.records)||!Array.isArray(s.bookmarks))throw Error('형식이 올바르지 않은 백업입니다.');
+ const out=fresh();
+ for(const [id,r] of Object.entries(s.records)){if(!byId.has(id))continue;if(!r||!['correct','wrong'].includes(r.status)||!Number.isInteger(r.attempts)||r.attempts<1||!Number.isInteger(r.correct)||r.correct<0||r.correct>r.attempts||!Number.isFinite(r.updated))throw Error('학습 기록이 올바르지 않습니다.');out.records[id]={status:r.status,attempts:r.attempts,correct:r.correct,updated:r.updated};}
+ out.bookmarks=[...new Set(s.bookmarks.filter(id=>byId.has(id)))];
+ if(s.session){const x=s.session;if(!Array.isArray(x.ids)||!x.ids.length||x.ids.length>questions.length||new Set(x.ids).size!==x.ids.length||!x.ids.every(id=>byId.has(id))||!Number.isInteger(x.index)||x.index<0||x.index>x.ids.length||!Array.isArray(x.results)||x.results.length!==x.index||!x.results.every((r,i)=>r&&r.id===x.ids[i]&&['correct','wrong','skip'].includes(r.status)))throw Error('진행 중인 학습 정보가 올바르지 않습니다.');out.session={ids:x.ids,index:x.index,results:x.results.map(r=>({id:r.id,status:r.status,input:String(r.input??'').slice(0,5000)})),input:String(x.input??'').slice(0,5000),revealed:Boolean(x.revealed),started:Number(x.started)||Date.now(),title:String(x.title||'복습').slice(0,200)};}
+ return out;
+}
 try{const s=localStorage.getItem(KEY);if(s)state=validState(JSON.parse(s));}catch(e){storageOK=false;}
 
+// --- 이 아래에 Firebase 설정 및 persist 함수가 위치합니다 ---
 // import 구문은 다 지우고, 여기서부터 바로 Firebase를 설정합니다.
 const firebaseConfig = {
   apiKey: "AIzaSyBUUNb7WjXIkKkfWv0GrrBvoMSpZdhfczU",
