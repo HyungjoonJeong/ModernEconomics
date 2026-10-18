@@ -6265,38 +6265,51 @@ document.addEventListener('click', async e => {
   // ==========================================
   // [추가] 구글 로그인 / 로그아웃 버튼 처리
   // ==========================================
-  if (b.id === 'google-login-btn' || b.dataset.action === 'login' || b.innerText.trim().includes('Google 로그인') || b.innerText.trim() === '로그아웃') {
-    e.preventDefault();
-    if (typeof firebase === 'undefined' || !auth) {
-      toast('인증 모듈이 설정되지 않았습니다.');
-      return;
-    }
+let isLoggingIn = false; // 중복 호출 방지 플래그
 
-    if (auth.currentUser) {
-      try {
-        await auth.signOut();
-        toast('로그아웃되었습니다.');
-      } catch (err) {
-        console.error('로그아웃 실패:', err);
-      }
-    } else {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      try {
-        await auth.signInWithPopup(provider);
-        toast('구글 계정으로 로그인되었습니다.');
-      } catch (err) {
-        console.error('로그인 실패:', err);
-        if (err.code === 'auth/popup-blocked') {
-          alert('브라우저의 팝업 차단을 해제해 주세요.');
-        } else if (err.code === 'auth/unauthorized-domain') {
-          alert('Firebase 콘솔 [승인된 도메인]에 현재 주소를 등록해 주세요.');
-        } else {
-          toast('로그인 실패: ' + err.message);
-        }
-      }
-    }
-    return; // 로그인/로그아웃 처리 후 조기 종료
+// document 클릭 리스너 내부
+if (b.id === 'google-login-btn' || b.dataset.action === 'login' || b.innerText.trim().includes('Google 로그인') || b.innerText.trim() === '로그아웃') {
+  e.preventDefault();
+  
+  if (typeof firebase === 'undefined' || !auth) {
+    toast('인증 모듈이 설정되지 않았습니다.');
+    return;
   }
+
+  if (auth.currentUser) {
+    // 로그아웃 처리
+    try {
+      await auth.signOut();
+      toast('로그아웃되었습니다.');
+    } catch (err) {
+      console.error('로그아웃 실패:', err);
+    }
+  } else {
+    // 이미 로그인 처리가 진행 중이면 중복 실행 방지
+    if (isLoggingIn) return;
+    isLoggingIn = true;
+
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try {
+      await auth.signInWithPopup(provider);
+      toast('구글 계정으로 로그인되었습니다.');
+    } catch (err) {
+      // 사용자가 팝업을 닫았거나 중복 요청으로 취소된 경우는 경고창 생략
+      if (err.code === 'auth/cancelled-popup-request' || err.code === 'auth/popup-closed-by-user') {
+        console.warn('로그인 팝업 요청이 취소되었습니다.');
+      } else if (err.code === 'auth/popup-blocked') {
+        alert('브라우저의 팝업 차단을 해제해 주세요.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        alert('Firebase 콘솔 [승인된 도메인]에 현재 주소를 등록해 주세요.');
+      } else {
+        toast('로그인 실패: ' + err.message);
+      }
+    } finally {
+      isLoggingIn = false; // 처리 완료 후 플래그 해제
+    }
+  }
+  return;
+}
 
   // ==========================================
   // 기존 앱 네비게이션 및 액션 처리 유지
