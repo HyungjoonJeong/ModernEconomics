@@ -6065,48 +6065,63 @@ if (!auth) {
   const container = document.getElementById('auth-container');
   if (container) container.classList.add('hidden');
 } else {
-  // 2. 로그인 상태 변화 감지 (로그인/로그아웃 시 자동 갱신)
-  auth.onAuthStateChanged((user) => {
-    currentUser = user;
-    const loginBtn = document.getElementById('google-login-btn');
-    const badge = document.querySelector('.local-badge');
-
-    if (user) {
-      if (loginBtn) loginBtn.innerText = '로그아웃';
-      if (badge) badge.innerHTML = '<i></i> 클라우드 동기화 켬';
-      // 로그인 시 로컬 데이터를 클라우드에 1회 동기화
-      if (typeof persist === 'function') persist(true);
-    } else {
-      if (loginBtn) loginBtn.innerText = 'Google로 로그인';
-      if (badge) badge.innerHTML = storageOK ? '<i></i> 이 기기에 자동 저장' : '자동 저장 확인 필요';
-    }
-  });
-
-  // 3. 로그인/로그아웃 버튼 클릭 이벤트 등록
+// --- [수정] 2. 로그인 상태 변화 감지 ---
+auth.onAuthStateChanged((user) => {
+  currentUser = user;
   const loginBtn = document.getElementById('google-login-btn');
-  if (loginBtn) {
-    loginBtn.addEventListener('click', async () => {
-      if (auth.currentUser) {
-        // 이미 로그인된 상태면 로그아웃
-        try {
-          await auth.signOut();
-          toast('로그아웃되었습니다.');
-        } catch (e) {
-          console.error('로그아웃 에러:', e);
-        }
-      } else {
-        // 로그인이 안 된 상태면 구글 로그인 팝업 호출
-        const provider = new firebase.auth.GoogleAuthProvider();
-        try {
-          await auth.signInWithPopup(provider);
-          toast('구글 계정으로 로그인되었습니다.');
-        } catch (err) {
-          console.error('로그인 실패:', err);
-          toast('로그인에 실패했습니다. 팝업 차단을 확인해 주세요.');
-        }
-      }
-    });
+  const badge = document.querySelector('.local-badge');
+
+  if (user) {
+    if (loginBtn) loginBtn.innerText = '로그아웃';
+    if (badge) badge.innerHTML = '<i></i> 클라우드 동기화 켬';
+    if (typeof persist === 'function') persist(true);
+  } else {
+    if (loginBtn) loginBtn.innerText = 'Google로 로그인';
+    if (badge) badge.innerHTML = typeof storageOK !== 'undefined' && storageOK ? '<i></i> 이 기기에 자동 저장' : '자동 저장 확인 필요';
   }
+});
+
+// --- [수정] 3. 이벤트 위임(Event Delegation)으로 클릭 처리 ---
+document.addEventListener('click', async (e) => {
+  // 클릭된 대상이 #google-login-btn이거나 그 내부 요소인지 확인
+  const loginBtn = e.target.closest('#google-login-btn');
+  if (!loginBtn) return;
+
+  e.preventDefault();
+
+  if (!auth) {
+    toast('인증 모듈이 준비되지 않았습니다.');
+    return;
+  }
+
+  if (auth.currentUser) {
+    // 이미 로그인된 상태면 로그아웃
+    try {
+      await auth.signOut();
+      toast('로그아웃되었습니다.');
+    } catch (err) {
+      console.error('로그아웃 에러:', err);
+      toast('로그아웃 중 오류가 발생했습니다.');
+    }
+  } else {
+    // 구글 로그인 실행
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try {
+      await auth.signInWithPopup(provider);
+      toast('구글 계정으로 로그인되었습니다.');
+    } catch (err) {
+      console.error('로그인 에러:', err);
+      // 에러 상세 알림
+      if (err.code === 'auth/popup-blocked') {
+        alert('브라우저의 팝업 차단을 해제해 주세요.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        alert('Firebase 콘솔의 [승인된 도메인]에 현재 주소가 등록되지 않았습니다.');
+      } else {
+        toast('로그인에 실패했습니다: ' + err.message);
+      }
+    }
+  }
+});
 }
 
 // --- 이후 기존 함수들(toast, updateNav, setView, home 등) 유지 ---
