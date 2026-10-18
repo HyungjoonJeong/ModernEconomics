@@ -6210,15 +6210,19 @@ document.addEventListener('click', async (e) => {
 // --- 이후 기존 함수들(toast, updateNav, setView, home 등) 유지 ---
 
 function toast(msg){const t=$('#toast');t.textContent=msg;t.style.display='block';clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.style.display='none',4000);}
+
 function updateNav() {
   const wrong = questions.filter(q => state.records[q.id]?.status === 'wrong').length;
   $('#wrong-count').textContent = wrong;
   $('#bookmark-count').textContent = state.bookmarks.length;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === view));
   
-  // 로그인 상태 배지 및 버튼 텍스트 함께 갱신
-  updateAuthUI();
+  // UI 갱신
+  if (typeof updateAuthUI === 'function') {
+    updateAuthUI();
+  }
 }
+
 function setView(v,html){view=v;$('#main').innerHTML=html;$('#breadcrumb').textContent=({home:'나의 학습 공간',setup:'새로운 학습',flash:'플래시카드로 기억하기',quiz:'집중해서 한 문제씩',result:'이번 학습 돌아보기',wrong:'틀린 문제 다시 보기',bookmarks:'기억해 둘 문제',browse:'전체 문제 살펴보기',settings:'학습 기록과 앱 관리'})[v]||'나의 학습 공간';updateNav();window.scrollTo({top:0,behavior:'instant'});$('#main').focus({preventScroll:true});}
 const intro=(eyebrow,title,desc)=>`<div class="intro"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${desc}</p></div><span class="tag">7개 강의 · 738문항</span></div>`;
 function bookmarkButton(id){return `<button class="bookmark-btn ${state.bookmarks.includes(id)?'saved':''}" data-bookmark="${id}" aria-pressed="${state.bookmarks.includes(id)}">${state.bookmarks.includes(id)?'★ 저장됨':'☆ 북마크'}</button>`;}
@@ -6286,29 +6290,46 @@ if (b.id === 'google-login-btn' || b.dataset.action === 'login' || b.innerText.t
     }
   } else {
     // 이미 로그인 처리가 진행 중이면 중복 실행 방지
-    if (isLoggingIn) return;
-    isLoggingIn = true;
+// 중복 클릭 방지 변수
+let isLoggingIn = false;
 
-    const provider = new firebase.auth.GoogleAuthProvider();
-    try {
-      await auth.signInWithPopup(provider);
-      toast('구글 계정으로 로그인되었습니다.');
-    } catch (err) {
-      // 사용자가 팝업을 닫았거나 중복 요청으로 취소된 경우는 경고창 생략
-      if (err.code === 'auth/cancelled-popup-request' || err.code === 'auth/popup-closed-by-user') {
-        console.warn('로그인 팝업 요청이 취소되었습니다.');
-      } else if (err.code === 'auth/popup-blocked') {
-        alert('브라우저의 팝업 차단을 해제해 주세요.');
-      } else if (err.code === 'auth/unauthorized-domain') {
-        alert('Firebase 콘솔 [승인된 도메인]에 현재 주소를 등록해 주세요.');
-      } else {
-        toast('로그인 실패: ' + err.message);
-      }
-    } finally {
-      isLoggingIn = false; // 처리 완료 후 플래그 해제
+// 1. updateNav보다 '먼저' 선언되어야 하는 인증 UI 갱신 함수
+function updateAuthUI() {
+  const loginBtn = document.getElementById('google-login-btn') || 
+                   document.querySelector('[data-action="login"]') ||
+                   Array.from(document.querySelectorAll('button')).find(b => 
+                     b.innerText.trim().includes('Google') || b.innerText.trim() === '로그아웃'
+                   );
+  const badge = document.querySelector('.local-badge');
+
+  if (currentUser) {
+    if (loginBtn) {
+      loginBtn.innerText = '로그아웃';
+      loginBtn.classList.add('logged-in');
+    }
+    if (badge) {
+      badge.innerHTML = '<i></i> 클라우드 동기화 켬';
+    }
+  } else {
+    if (loginBtn) {
+      loginBtn.innerText = 'Google 로그인';
+      loginBtn.classList.remove('logged-in');
+    }
+    if (badge) {
+      badge.innerHTML = typeof storageOK !== 'undefined' && storageOK ? '<i></i> 이 기기에 자동 저장' : '자동 저장 확인 필요';
     }
   }
-  return;
+}
+
+// 2. 인증 상태 변화 감지 리스너
+if (auth) {
+  auth.onAuthStateChanged((user) => {
+    currentUser = user;
+    updateAuthUI();
+    if (user && typeof persist === 'function') {
+      persist(true);
+    }
+  });
 }
 
   // ==========================================
