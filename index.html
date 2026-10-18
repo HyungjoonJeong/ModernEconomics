@@ -6044,9 +6044,6 @@ const firebaseConfig = {
   appId: "1:289737545208:web:505f6cd89135274d96720d"
   // ... 본인의 설정값 입력
 };
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
 let auth=null,db=null;
 try{if(typeof firebase!=='undefined'&&firebaseConfig.apiKey&&firebaseConfig.projectId){firebase.initializeApp(firebaseConfig);auth=firebase.auth();db=firebase.firestore();}}catch(err){console.warn('로그인 설정을 확인해 주세요. 기기 내 학습은 계속 사용할 수 있습니다.');}
 if(!auth){document.getElementById('auth-container').classList.add('hidden');}
