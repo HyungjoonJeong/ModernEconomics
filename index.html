@@ -6036,9 +6036,17 @@ try{const s=localStorage.getItem(KEY);if(s)state=validState(JSON.parse(s));}catc
 // --- 이 아래에 Firebase 설정 및 persist 함수가 위치합니다 ---
 // import 구문은 다 지우고, 여기서부터 바로 Firebase를 설정합니다.
 const firebaseConfig = {
-
+  apiKey: "AIzaSyBUUNb7WjXIkKkfWv0GrrBvoMSpZdhfczU",
+  authDomain: "modern-economics.firebaseapp.com",
+  projectId: "modern-economics",
+  storageBucket: "modern-economics.firebasestorage.app",
+  messagingSenderId: "289737545208",
+  appId: "1:289737545208:web:505f6cd89135274d96720d"
   // ... 본인의 설정값 입력
 };
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
 let auth=null,db=null;
 try{if(typeof firebase!=='undefined'&&firebaseConfig.apiKey&&firebaseConfig.projectId){firebase.initializeApp(firebaseConfig);auth=firebase.auth();db=firebase.firestore();}}catch(err){console.warn('로그인 설정을 확인해 주세요. 기기 내 학습은 계속 사용할 수 있습니다.');}
 if(!auth){document.getElementById('auth-container').classList.add('hidden');}
