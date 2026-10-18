@@ -6166,15 +6166,93 @@ function markFlash(keep=false){const f=state.flash;if(!f||f.index>=f.ids.length)
 document.addEventListener('keydown',e=>{if(view!=='flash'||!$('#flash-answer')||e.isComposing||e.repeat||e.ctrlKey||e.metaKey||e.altKey||document.querySelector('dialog[open]')||['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;if(e.key==='ArrowLeft'){e.preventDefault();moveFlash(-1);}else if(e.key==='ArrowRight'){e.preventDefault();moveFlash(1);}else if(e.key.toLowerCase()==='b'){e.preventDefault();markFlash();}else if(e.code==='Space'&&!['BUTTON','A'].includes(document.activeElement?.tagName)){e.preventDefault();toggleFlashAnswer();}});
 
 function navigate(v){if(v==='flash')setup('','all','flash');else if(v==='home')home();else if(v==='settings')settings();else list(v);}
-document.addEventListener('click',async e=>{
- const b=e.target.closest('button,a[data-nav]');if(!b||b.disabled)return;
- if(b.dataset.nav){e.preventDefault();navigate(b.dataset.nav);return;}
- if(b.dataset.lecture){setup(b.dataset.lecture);return;}
- if(b.dataset.bookmark){const id=b.dataset.bookmark;state.bookmarks=state.bookmarks.includes(id)?state.bookmarks.filter(x=>x!==id):[...state.bookmarks,id];persist();if(['browse','wrong','bookmarks'].includes(view))renderList();else{b.outerHTML=bookmarkButton(id);}return;}
- if(b.dataset.grade){grade(b.dataset.grade);return;}
- if(b.dataset.page){page+=Number(b.dataset.page);renderList();window.scrollTo({top:0,behavior:'instant'});return;}
- switch(b.dataset.action){case 'flash-resume':flashcard();break;case 'flash-toggle':toggleFlashAnswer();break;case 'flash-prev':moveFlash(-1);break;case 'flash-next':moveFlash(1);break;case 'flash-mark':markFlash();break;case 'flash-save-next':markFlash(true);moveFlash(1);break;case 'flash-restart':if(state.flash){state.flash.index=0;state.flash.revealed=false;persist();flashcard();}break;case 'flash-review':await beginFlash(questions.filter(q=>state.bookmarks.includes(q.id)),{count:0,shuffle:false,title:'복습 표시한 카드'});break;case 'flash-list':await beginFlash(filtered(),{count:0,shuffle:false,title:({wrong:'오답 노트',bookmarks:'복습 표시',browse:'선택 범위'})[listKind]+' 플래시카드'});break;case 'setup':setup();break;case 'quick':await begin(questions);break;case 'resume':quiz();break;case 'select-all':case 'select-none':document.querySelectorAll('[name=lecture]').forEach(x=>x.checked=b.dataset.action==='select-all');break;case 'reveal':reveal();break;case 'skip':grade('skip');break;case 'retry':await begin(state.session.results.filter(r=>r.status!=='correct').map(r=>byId.get(r.id)),{count:0,title:'틀림·건너뜀 복습'});break;case 'study-list':await begin(filtered(),{count:0,title:({wrong:'오답 노트 복습',bookmarks:'북마크 복습',browse:'선택 범위 복습'})[listKind]});break;case 'export':{const blob=new Blob([JSON.stringify({...state,exportedAt:new Date().toISOString()},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`econ-study-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('학습 기록 백업을 내려받았습니다.');break;}case 'import':$('#import-file').click();break;case 'reset':if(await confirmAction('모든 기록을 초기화할까요?','이 기기의 결과, 북마크, 진행 중인 학습이 모두 삭제됩니다. 되돌리려면 백업 파일이 필요합니다.')){state=fresh();persist();home();toast('학습 기록을 초기화했습니다.');}break;case 'install':if(installPrompt){await installPrompt.prompt();installPrompt=null;settings();}break;}
+
+document.addEventListener('click', async e => {
+  const b = e.target.closest('button,a[data-nav]');
+  if (!b || b.disabled) return;
+
+  // ==========================================
+  // [추가] 구글 로그인 / 로그아웃 버튼 처리
+  // ==========================================
+  if (b.id === 'google-login-btn' || b.dataset.action === 'login' || b.innerText.trim().includes('Google 로그인') || b.innerText.trim() === '로그아웃') {
+    e.preventDefault();
+    if (typeof firebase === 'undefined' || !auth) {
+      toast('인증 모듈이 설정되지 않았습니다.');
+      return;
+    }
+
+    if (auth.currentUser) {
+      try {
+        await auth.signOut();
+        toast('로그아웃되었습니다.');
+      } catch (err) {
+        console.error('로그아웃 실패:', err);
+      }
+    } else {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      try {
+        await auth.signInWithPopup(provider);
+        toast('구글 계정으로 로그인되었습니다.');
+      } catch (err) {
+        console.error('로그인 실패:', err);
+        if (err.code === 'auth/popup-blocked') {
+          alert('브라우저의 팝업 차단을 해제해 주세요.');
+        } else if (err.code === 'auth/unauthorized-domain') {
+          alert('Firebase 콘솔 [승인된 도메인]에 현재 주소를 등록해 주세요.');
+        } else {
+          toast('로그인 실패: ' + err.message);
+        }
+      }
+    }
+    return; // 로그인/로그아웃 처리 후 조기 종료
+  }
+
+  // ==========================================
+  // 기존 앱 네비게이션 및 액션 처리 유지
+  // ==========================================
+  if (b.dataset.nav) { e.preventDefault(); navigate(b.dataset.nav); return; }
+  if (b.dataset.lecture) { setup(b.dataset.lecture); return; }
+  if (b.dataset.bookmark) {
+    const id = b.dataset.bookmark;
+    state.bookmarks = state.bookmarks.includes(id) ? state.bookmarks.filter(x => x !== id) : [...state.bookmarks, id];
+    persist();
+    if (['browse', 'wrong', 'bookmarks'].includes(view)) renderList();
+    else { b.outerHTML = bookmarkButton(id); }
+    return;
+  }
+  if (b.dataset.grade) { grade(b.dataset.grade); return; }
+  if (b.dataset.page) { page += Number(b.dataset.page); renderList(); window.scrollTo({ top: 0, behavior: 'instant' }); return; }
+
+  switch (b.dataset.action) {
+    case 'flash-resume': flashcard(); break;
+    case 'flash-toggle': toggleFlashAnswer(); break;
+    case 'flash-prev': moveFlash(-1); break;
+    case 'flash-next': moveFlash(1); break;
+    case 'flash-mark': markFlash(); break;
+    case 'flash-save-next': markFlash(true); moveFlash(1); break;
+    case 'flash-restart': if (state.flash) { state.flash.index = 0; state.flash.revealed = false; persist(); flashcard(); } break;
+    case 'flash-review': await beginFlash(questions.filter(q => state.bookmarks.includes(q.id)), { count: 0, shuffle: false, title: '복습 표시한 카드' }); break;
+    case 'flash-list': await beginFlash(filtered(), { count: 0, shuffle: false, title: ({ wrong: '오답 노트', bookmarks: '복습 표시', browse: '선택 범위' })[listKind] + ' 플래시카드' }); break;
+    case 'setup': setup(); break;
+    case 'quick': await begin(questions); break;
+    case 'resume': quiz(); break;
+    case 'select-all':
+    case 'select-none': document.querySelectorAll('[name=lecture]').forEach(x => x.checked = b.dataset.action === 'select-all'); break;
+    case 'reveal': reveal(); break;
+    case 'skip': grade('skip'); break;
+    case 'retry': await begin(state.session.results.filter(r => r.status !== 'correct').map(r => byId.get(r.id)), { count: 0, title: '틀림·건너뜀 복습' }); break;
+    case 'study-list': await begin(filtered(), { count: 0, title: ({ wrong: '오답 노트 복습', bookmarks: '북마크 복습', browse: '선택 범위 복습' })[listKind] }); break;
+    case 'export': {
+      const blob = new Blob([JSON.stringify({ ...state, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' }), url = URL.createObjectURL(blob), a = document.createElement('a');
+      a.href = url; a.download = `econ-study-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); toast('학습 기록 백업을 내려받았습니다.');
+      break;
+    }
+    case 'import': $('#import-file').click(); break;
+    case 'reset': if (await confirmAction('모든 기록을 초기화할까요?', '이 기기의 결과, 북마크, 진행 중인 학습이 모두 삭제됩니다. 되돌리려면 백업 파일이 필요합니다.')) { state = fresh(); persist(); home(); toast('학습 기록을 초기화했습니다.'); } break;
+    case 'install': if (installPrompt) { await installPrompt.prompt(); installPrompt = null; settings(); } break;
+  }
 });
+
 document.addEventListener('submit',async e=>{if(e.target.id!=='setup-form')return;e.preventDefault();const f=new FormData(e.target),ls=f.getAll('lecture');if(!ls.length){toast('강의를 한 개 이상 선택해 주세요.');return;}const pool=f.get('pool');const qs=questions.filter(q=>ls.includes(q.lecture)&&(pool!=='new'||!state.records[q.id])&&(pool!=='wrong'||state.records[q.id]?.status==='wrong')&&(pool!=='bookmarks'||state.bookmarks.includes(q.id)));await (f.get('mode')==='flash'?beginFlash:begin)(qs,{count:Number(f.get('count')),shuffle:f.has('shuffle'),title:ls.length===1?lectures.find(l=>l.id===ls[0]).teacher+' 강의 복습':`${ls.length}개 강의 복습`});});
 document.addEventListener('input',e=>{if(e.target.id==='answer-input'&&state.session&&!state.session.revealed){state.session.input=e.target.value;persist();}if(e.target.id==='search'){search=e.target.value.trim();page=1;renderList();}});
 document.addEventListener('change',async e=>{if(e.target.id==='lecture-filter'){filter=e.target.value;page=1;renderList();}if(e.target.id==='import-file'){const file=e.target.files[0];if(!file)return;try{if(file.size>5*1024*1024)throw Error('백업 파일은 5MB 이하여야 합니다.');const incoming=validState(JSON.parse(await file.text()));if(await confirmAction('백업 기록으로 교체할까요?',`불러올 기록: ${Object.keys(incoming.records).length}문항, 북마크 ${incoming.bookmarks.length}개. 현재 기기의 기록이 교체됩니다.`)){state=incoming;persist();home();toast('백업 기록을 불러왔습니다.');}}catch(err){toast(err instanceof SyntaxError?'JSON 백업 파일을 확인해 주세요.':err.message);}e.target.value='';}});
